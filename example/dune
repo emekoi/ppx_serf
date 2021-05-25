@@ -1,0 +1,7 @@
+(executable
+  (name test)
+  (preprocess (pps ppx_serf)))
+
+(alias
+  (name example)
+  (deps test.exe))

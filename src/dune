@@ -1,0 +1,8 @@
+(library
+ (name ppx_serf)
+ (public_name ppx_serf)
+ (kind ppx_deriver)
+ (preprocess (pps ppxlib.metaquot))
+ (libraries ppxlib)
+ ; (libraries ppxlib ppx_deriving ppx_tools ppx_deriving_yojson cohttp cohttp-lwt-unix)
+)
