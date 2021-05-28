@@ -169,7 +169,7 @@ let generate_impl ~loc url format meth type_decl =
         let key =
           match SerfAttributes.attr_key attrs with
             | Some key -> key
-            | None -> evar_name
+            | None -> estring ~loc name
         in
         (** The function that will be used at runtime to marshal this
           * parameter into a string or (nonempty) list of strings *)
@@ -284,7 +284,6 @@ let generate_impl ~loc url format meth type_decl =
                     in
                     pexp_fun ~loc (Optional name) None (pvar ~loc name) accum'
                 | _ ->
-                    print_endline name;
                     pexp_fun ~loc (Labelled name) None (pvar ~loc name) addparam_accum
               end)
         fn
