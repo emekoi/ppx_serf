@@ -119,7 +119,6 @@ let generate_impl ~loc url format meth type_decl =
               in
               let headers = Cohttp.Header.(add headers "Cookie" cookies) in
               let%lwt resp, body =
-                Lwt_io.printf "url: %s\n" (Uri.to_string uri);%lwt
                 [%e req_exp]
               in
               let cookies_headers =
