@@ -1,7 +1,4 @@
 open Ppxlib
-open ExtLib
-(* open Cohttp
-open Cohttp_lwt_unix *)
 
 let deriver = "serf"
 
@@ -22,35 +19,56 @@ let parse_options loc _url _format _meth =
         Location.raise_errorf ~loc
           "%s option \"url\" accepts a string constant parameter" deriver
   in
-  let meth = match _meth with Some [%expr `Post] -> `Post | _ -> `Get in
+  let meth = match _meth with
+    | Some [%expr `Delete] -> `Delete
+    | Some [%expr `Get] | None -> `Get
+    | Some [%expr `Patch] -> `Patch
+    | Some [%expr `Post] -> `Post
+    | Some [%expr `Put] -> `Put
+    | Some [%expr [%e? x]] -> Location.raise_errorf ~loc:x.pexp_loc "invalid HTTP method"  in
   (url, format, meth)
 
-module SerfAttributes = struct
-  let attr_key attrs =
-    Ppx_deriving.(attrs |> attr ~deriver "key" |> Arg.(get_attr ~deriver expr))
+let attr_key attrs =
+  Ppx_deriving.(attrs |> attr ~deriver "key" |> Arg.(get_attr ~deriver expr))
 
-  let attr_default attrs =
-    Ppx_deriving.(
-      attrs |> attr ~deriver "default" |> Arg.(get_attr ~deriver expr))
+let attr_default attrs =
+  Ppx_deriving.(
+    attrs |> attr ~deriver "default" |> Arg.(get_attr ~deriver expr))
 
-  let attr_ispostparam attrs =
-    Ppx_deriving.(attrs |> attr ~deriver "post" |> Arg.get_flag ~deriver)
+let attr_ispostparam attrs =
+  Ppx_deriving.(attrs |> attr ~deriver "post" |> Arg.get_flag ~deriver)
 
-  let attr_isgetparam attrs =
-    Ppx_deriving.(attrs |> attr ~deriver "get" |> Arg.get_flag ~deriver)
+let attr_isgetparam attrs =
+  Ppx_deriving.(attrs |> attr ~deriver "get" |> Arg.get_flag ~deriver)
 
-  let attr_ispathparam attrs =
-    Ppx_deriving.(attrs |> attr ~deriver "path" |> Arg.get_flag ~deriver)
+let attr_ispathparam attrs =
+  Ppx_deriving.(attrs |> attr ~deriver "path" |> Arg.get_flag ~deriver)
 
-  let is_optional { pld_type; pld_attributes; _ } =
-    let attrs = pld_attributes @ pld_type.ptyp_attributes in
-    match attr_default attrs with
-    | Some _ -> true
-    | None -> (
-        match Ppx_deriving.remove_pervasives ~deriver pld_type with
-        | [%type: [%t? _] list] | [%type: [%t? _] option] -> true
-        | _ -> false)
-end
+let is_optional { pld_type; pld_attributes; _ } =
+  let attrs = pld_attributes @ pld_type.ptyp_attributes in
+  match attr_default attrs with
+  | Some _ -> true
+  | None -> (
+      match Ppx_deriving.remove_pervasives ~deriver pld_type with
+      | [%type: [%t? _] list] | [%type: [%t? _] option] -> true
+      | _ -> false)
+
+
+let gen_name type_decl meth =
+  let prefix =
+  match meth with
+    | `Get -> "serf_get"
+    | `Delete -> "serf_delete"
+    | `Patch -> "serf_patch"
+    | `Post -> "serf_post"
+    | `Put -> "serf_put"
+  in
+  match type_decl with
+    | { ptype_name = { txt = "t"; _ }; _ } ->
+        prefix
+    | _ ->
+        Ppx_deriving.mangle_type_decl (`Prefix prefix) type_decl
+
 
 let generate_impl ~loc url format meth type_decl =
   let open Ast_builder.Default in
@@ -92,13 +110,13 @@ let generate_impl ~loc url format meth type_decl =
                              "application/json; charset=utf-8")]
           in
           let req_exp =
-            match meth with
-            | `Get -> [%expr Client.get ~headers uri]
-            | `Post ->
-                [%expr
-                  Client.post ~headers
-                    ~body:(Cohttp_lwt.Body.of_string body)
-                    uri]
+            let meth_exp = match meth with
+              | `Get -> [%expr `GET]
+              | `Delete -> [%expr `DELETE]
+              | `Patch -> [%expr `PATCH]
+              | `Post -> [%expr `POST]
+              | `Put -> [%expr `PUT]
+            in [%expr Client.call ~headers ~body:(Cohttp_lwt.Body.of_string body) [%e meth_exp] uri]
           in
           let payload_exp =
             [%expr
@@ -166,7 +184,7 @@ let generate_impl ~loc url format meth type_decl =
         let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
         let evar_name = evar ~loc name in
         let key =
-          match SerfAttributes.attr_key attrs with
+          match attr_key attrs with
             | Some key -> key
             | None -> estring ~loc name
         in
@@ -244,20 +262,20 @@ let generate_impl ~loc url format meth type_decl =
             [%e accum]]
         in
         let addparam_accum =
-          match SerfAttributes.attr_ispathparam attrs with
+          match attr_ispathparam attrs with
             | true ->
                 add_path_to_uri_accum
             | false ->
                 if name = "body"
                 then add_body_accum
-                else begin match SerfAttributes.attr_ispostparam attrs with
+                else begin match attr_ispostparam attrs with
                   | true ->
                       add_post_param_accum
                   | false ->
                       add_to_uri_accum
                 end
         in
-        match SerfAttributes.attr_default attrs with
+        match attr_default attrs with
           | Some default ->
             let default = Some (Ppx_deriving.quote ~quoter default) in
               pexp_fun ~loc (Optional name) default (pvar ~loc name) addparam_accum
@@ -302,19 +320,7 @@ let generate_impl ~loc url format meth type_decl =
       let body = "" in
       [%e creator]]
   in
-  let prefix =
-    match meth with
-      | `Get -> "serf_get"
-      | `Post -> "serf_post"
-  in
-  let name =
-    match type_decl with
-      | { ptype_name = { txt = "t"; _ }; _ } ->
-          prefix
-      | _ ->
-          Ppx_deriving.mangle_type_decl (`Prefix prefix) type_decl
-  in
-  value_binding ~loc ~pat:(pvar ~loc name) ~expr:(Ppx_deriving.sanitize ~quoter creator)
+  value_binding ~loc ~pat:(pvar ~loc (gen_name type_decl meth)) ~expr:(Ppx_deriving.sanitize ~quoter creator)
 
 (* _rec_flag is recursiveness so we don't need it *)
 (* val generate_impl: ctxt:Expansion_context.Deriver.t -> 'a * type_declaration list -> label option -> expression option -> expression option -> structure_item *)
@@ -331,7 +337,7 @@ let generate_intf ~loc _url _format meth type_decl =
   let typ =
     match type_decl.ptype_kind with
       | Ptype_record labels ->
-        let has_option = List.exists SerfAttributes.is_optional labels in
+        let has_option = List.exists is_optional labels in
         let typ =
           match has_option with
             | true -> ptyp_arrow ~loc Nolabel (ptyp_constr ~loc {txt = Longident.parse "unit"; loc = !default_loc} []) typ
@@ -340,7 +346,7 @@ let generate_intf ~loc _url _format meth type_decl =
         List.fold_left (fun accum { pld_name = { txt = name; loc }; pld_type; pld_attributes; _ } ->
           let attrs = pld_type.ptyp_attributes @ pld_attributes in
           let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
-          match SerfAttributes.attr_default attrs with
+          match attr_default attrs with
             | Some _ -> ptyp_arrow ~loc (Optional name) pld_type accum
             | None ->
                 begin match pld_type with
@@ -354,19 +360,7 @@ let generate_intf ~loc _url _format meth type_decl =
           typ labels
       | _ -> Location.raise_errorf ~loc "%s can only be derived for record types" deriver
   in
-  let prefix =
-    match meth with
-      | `Get -> "serf_get"
-      | `Post -> "serf_post"
-  in
-  let name =
-    match type_decl with
-      | { ptype_name = { txt = "t"; loc = _pppp }; _ } ->
-          prefix
-      | _ ->
-          Ppx_deriving.mangle_type_decl (`Prefix prefix) type_decl
-  in
-  psig_value ~loc (value_description ~loc ~name:{txt = name; loc = !default_loc} ~type_:typ ~prim:[])
+  psig_value ~loc (value_description ~loc ~name:{txt = (gen_name type_decl meth); loc = !default_loc} ~type_:typ ~prim:[])
 
 let generate_intfs ~ctxt (_rec_flag, type_decls) _url _format _meth =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
