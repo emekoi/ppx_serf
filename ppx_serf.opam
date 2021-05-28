@@ -1,10 +1,10 @@
 opam-version: "2.0"
-authors: "John Whitington"
-maintainer: "contact@coherentgraphics.co.uk"
-homepage: "https://github.com/johnwhitington/ppx_blob"
-dev-repo: "git+https://github.com/johnwhitington/ppx_blob.git"
-bug-reports: "https://github.com/johnwhitington/ppx_blob/issues/"
-doc: "https://johnwhitington.github.io/ppx_blob/"
+authors: "Emeka Nkurumeh"
+maintainer: "emekankurumeh@outlook.com"
+homepage: "https://github.com/emekoi/ppx_serf"
+dev-repo: "git+https://github.com/emekoi/ppx_serf.git"
+bug-reports: "https://github.com/emekoi/ppx_serf/issues/"
+doc: "https://emekoi.github.io/ppx_blob/"
 build: [
   ["dune" "build" "-p" name "-j" jobs]
   ["dune" "runtest" "-p" name "-j" jobs] {with-test}
@@ -13,14 +13,14 @@ depends: [
   "ocaml"
   "dune"
   "ppxlib" {build}
+  "ppx_tools" {build}
   "ppx_deriving" {build}
   "ppx_deriving_yojson" {build}
+  "extlib" {build}
   "cohttp" {build}
   "cohttp-lwt-unix" {build}
-  "extlib" {build}
-  "ppx_tools" {build}
-  "alcotest" {with-test}
+  "lwt" {build}
 ]
-synopsis: "Include a file as a string at compile time"
+synopsis: "Build API clients from type definitions"
 description:
-  "ppx_blob allows you to include a binary blob from a file as a string. Writing `[%blob \"filename\"]` will replace the string with the contents of the file at compile time. This allows the inclusion of arbitary, possibly compressed, data, without the need to respect OCaml's lexical conventions."
+  "ppx_serf allows you build API clients from type definitions."

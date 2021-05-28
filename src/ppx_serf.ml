@@ -323,7 +323,6 @@ let generate_impl ~loc url format meth type_decl =
   value_binding ~loc ~pat:(pvar ~loc (gen_name type_decl meth)) ~expr:(Ppx_deriving.sanitize ~quoter creator)
 
 (* _rec_flag is recursiveness so we don't need it *)
-(* val generate_impl: ctxt:Expansion_context.Deriver.t -> 'a * type_declaration list -> label option -> expression option -> expression option -> structure_item *)
 let generate_impls ~ctxt (_rec_flag, type_decls) _url _format _meth =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
   let url, format, meth = parse_options loc _url _format _meth in
