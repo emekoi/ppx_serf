@@ -1,4 +1,3 @@
-(* open Lwt *)
 open Ppx_deriving_yojson_runtime
 
 type anime_quote = { anime : string; character : string; quote : string }
