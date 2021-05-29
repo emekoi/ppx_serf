@@ -35,6 +35,9 @@ let attr_default attrs =
   Ppx_deriving.(
     attrs |> attr ~deriver "default" |> Arg.(get_attr ~deriver expr))
 
+let attr_header attrs =
+  Ppx_deriving.(attrs |> attr ~deriver "header" |> Arg.(get_attr ~deriver expr))
+
 let attr_ispostparam attrs =
   Ppx_deriving.(attrs |> attr ~deriver "post" |> Arg.get_flag ~deriver)
 
@@ -120,8 +123,10 @@ let generate_impl ~loc url format meth type_decl =
           in
           let payload_exp =
             [%expr
-              let headers = Cohttp.Header.of_list ["User-Agent", "Mozilla/5.0"; Cohttp.Cookie.Cookie_hdr.serialize cookies]
+              let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
+              let headers = Cohttp.Header.add headers "Cookie" cookies
               in
+              Lwt_io.printf "%s\n" (Uri.to_string uri);%lwt
               let%lwt resp, body =
                 [%e req_exp]
               in
@@ -193,21 +198,21 @@ let generate_impl ~loc url format meth type_decl =
             | _ ->
                 [%expr (fun x -> [[%e make_converter pld_type] x])]
         in
-        let add_to_uri_accum =          
+        let add_to_uri_accum a =          
           [%expr
             let x = [%e converter] [%e evar_name] in
             let uri = Uri.add_query_param uri ([%e key], x) in
-            [%e accum]]
+            [%e a]]
         in
-        let add_path_to_uri_accum =
+        let add_path_to_uri_accum a =
           [%expr
             let [x] = [%e converter] [%e evar_name] in
             let path = Filename.concat (Uri.path uri) x in
             let uri = Uri.with_path uri path in
-            [%e accum]]
+            [%e a]]
         in
         (* bootleg url-form-encoder *)
-        let add_post_param_accum =
+        let add_post_param_accum a =
           [%expr
             let [x] = [%e converter] [%e evar_name] in
             let body =
@@ -215,33 +220,44 @@ let generate_impl ~loc url format meth type_decl =
               if body = "" then  form
               else body ^ "&" ^ form
             in
-            [%e accum]]
+            [%e a]]
         in
-        let add_body_accum =
+        let add_body_accum a =
           [%expr
             let [x] = [%e converter] [%e evar_name] in
             let body = x in
-            [%e accum]]
+            [%e a]]
         in
-        let addparam_accum =
-          match attr_ispathparam attrs with
-            | true ->
-                add_path_to_uri_accum
-            | false ->
-                if name = "body"
-                then add_body_accum
-                else begin match attr_ispostparam attrs with
-                  | true ->
-                      add_post_param_accum
-                  | false ->
-                      add_to_uri_accum
-                end
+        (* cannot be body and post *)
+        (* cannot be uri(query) and path *)
+        let add_param_accum a =
+          if attr_ispathparam attrs
+            then add_path_to_uri_accum a
+          else if name = "body"
+            then add_body_accum a
+          else if attr_ispostparam attrs
+            then add_post_param_accum a
+          else if Option.is_none(attr_header attrs)
+            then add_to_uri_accum a
+          else a
+        in
+        let add_header_accum a =
+          match attr_header attrs with
+          | Some h -> let a = [%expr
+            let [x] = [%e converter] [%e evar_name] in
+            let headers = Cohttp.Header.add headers [%e h] x in
+            [%e a]] in a
+          | None -> a
+        in
+        let param_accum a = add_header_accum (add_param_accum a)
         in
         match attr_default attrs with
           | Some default ->
             let default = Some (Ppx_deriving.quote ~quoter default) in
-              pexp_fun ~loc (Optional name) default (pvar ~loc name) addparam_accum
+              pexp_fun ~loc (Optional name) default (pvar ~loc name) (param_accum accum)
           | None ->
+            (* TODO: generalize this. we should be able to have
+            optional post params, headers, etc *)
               begin match pld_type with
                 | [%type: [%t? _] option] ->
                     let accum' =
@@ -251,7 +267,7 @@ let generate_impl ~loc url format meth type_decl =
                             | Some x ->
                                 let x = [%e converter] x in
                                 begin match x with
-                                  | [] -> raise (Failure ("parameter is required"))
+                                  | [] -> raise (Failure ("parameter '" ^ name ^ "' is required"))
                                   | x -> Uri.add_query_param uri ([%e key], x)
                                 end
                             | None -> uri
@@ -259,7 +275,7 @@ let generate_impl ~loc url format meth type_decl =
                     in
                     pexp_fun ~loc (Optional name) None (pvar ~loc name) accum'
                 | _ ->
-                    pexp_fun ~loc (Labelled name) None (pvar ~loc name) addparam_accum
+                    pexp_fun ~loc (Labelled name) None (pvar ~loc name) (param_accum accum)
               end)
         labels
         fn
@@ -276,6 +292,7 @@ let generate_impl ~loc url format meth type_decl =
       let open ExtLib in
       let uri = Uri.of_string [%e uri] in
       let body = "" in
+      let headers = Cohttp.Header.init_with "User-Agent" "Mozilla/5.0" in
       [%e creator]]
   in
   value_binding ~loc ~pat:(pvar ~loc (gen_name type_decl meth)) ~expr:(Ppx_deriving.sanitize ~quoter creator)

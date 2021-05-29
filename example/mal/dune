@@ -1,9 +1,9 @@
 (executable
-  (name example)
+  (name mal)
   (preprocess (pps ppx_serf lwt_ppx))
   (libraries ppx_deriving_yojson cohttp cohttp-lwt-unix lwt_ssl extlib)
 )
 
 (alias
-  (name example)
-  (deps example.exe))
+  (name mal)
+  (deps mal.exe))
