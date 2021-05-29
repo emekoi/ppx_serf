@@ -4,7 +4,7 @@ type anime_quote = { anime : string; character : string; quote : string }
 
 and anime_quotes = anime_quote list [@@deriving yojson]
 
-type anime_spec = { title : string }
+type anime_spec = { title : string; page : int [@default 1] }
 [@@deriving
   serf
     {
@@ -15,7 +15,7 @@ type anime_spec = { title : string }
 
 let main () =
   let title = Sys.argv.(1) in
-  let%lwt _, res, _ = serf_get_anime_spec ~title ~cookies:[] in
+  let%lwt _, res, _ = serf_get_anime_spec ~cookies:[] ~page:1 ~title in
   match res with
   | Ok res ->
       Lwt_list.iter_s

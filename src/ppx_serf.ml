@@ -179,7 +179,7 @@ let generate_impl ~loc url format meth type_decl =
             (pvar ~loc "cookies")
           payload_exp
         in
-      List.fold_left (fun accum { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } ->
+      List.fold_right (fun { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } accum ->
         let attrs = pld_attributes @ pld_type.ptyp_attributes in
         let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
         let evar_name = evar ~loc name in
@@ -289,22 +289,18 @@ let generate_impl ~loc url format meth type_decl =
                             | Some x ->
                                 let x = [%e converter] x in
                                 begin match x with
-                                  | [] ->
-                                      (* because fuck you that's why *)
-                                      raise (Failure ("parameter is required"))
-                                  | x ->
-                                      Uri.add_query_param uri ([%e key], x)
+                                  | [] -> raise (Failure ("parameter is required"))
+                                  | x -> Uri.add_query_param uri ([%e key], x)
                                 end
                             | None -> uri
-                        in
-                        [%e accum]]
+                        in [%e accum]]
                     in
                     pexp_fun ~loc (Optional name) None (pvar ~loc name) accum'
                 | _ ->
                     pexp_fun ~loc (Labelled name) None (pvar ~loc name) addparam_accum
               end)
-        fn
         labels
+        fn
     | _ ->
         Location.raise_errorf ~loc "%s can only be derived for record types"
           deriver
