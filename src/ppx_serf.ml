@@ -206,16 +206,14 @@ let generate_impl ~loc url format meth type_decl =
             let uri = Uri.with_path uri path in
             [%e accum]]
         in
+        (* bootleg url-form-encoder *)
         let add_post_param_accum =
           [%expr
             let [x] = [%e converter] [%e evar_name] in
             let body =
-              begin match body with
-                | "" ->
-                    (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
-                | s ->
-                    s ^ "&" ^ (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x)
-              end
+              let form = (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x) in
+              if body = "" then  form
+              else body ^ "&" ^ form
             in
             [%e accum]]
         in
