@@ -79,77 +79,75 @@ let generate_impl ~loc url format meth type_decl =
   let creator =
     match type_decl.ptype_kind with
     | Ptype_record labels ->
-        let fn =
-          let formatter_exp =
-            match format with
-            | `Raw -> [%expr fun s -> s]
-            | `Json None -> [%expr Yojson.Safe.from_string]
-            | `Json (Some func) ->
-                [%expr
-                  fun s ->
-                    let open Result in
-                    let mime =
-                      Cohttp.(Header.get (Response.headers resp) "Content-Type")
-                      |> function
-                      | Some s -> s
-                      | None -> ""
-                    in
-                    match String.trim (String.lowercase_ascii mime) with
-                    | "application/json; charset=utf-8" | "application/json;"
-                    | "application/json" | "" -> (
-                        let json = Yojson.Safe.from_string s in
-                        match [%e func] json with
-                        | Ok _ as x -> x
-                        | Error msg ->
-                            Error
-                              ("serf: the following fragment does not adhere \
-                                to the expected schema (" ^ msg ^ "):\n"
-                              ^ Yojson.Safe.pretty_to_string json
-                              ^ "\n"))
-                    | s ->
-                        Error
-                          (Printf.sprintf
-                             "bad response Content-Type (%s):expected (%s)" mime
-                             "application/json; charset=utf-8")]
-          in
-          let req_exp =
-            let meth_exp = match meth with
-              | `Get -> [%expr `GET]
-              | `Delete -> [%expr `DELETE]
-              | `Patch -> [%expr `PATCH]
-              | `Post -> [%expr `POST]
-              | `Put -> [%expr `PUT]
-            in [%expr Client.call ~headers ~body:(Cohttp_lwt.Body.of_string body) [%e meth_exp] uri]
-          in
-          let payload_exp =
-            [%expr
-              let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
-              let headers = Cohttp.Header.add headers "Cookie" cookies
-              in
-              Lwt_io.printf "%s\n" (Uri.to_string uri);%lwt
-              let%lwt resp, body =
-                [%e req_exp]
-              in
-              let cookies = Cohttp.Cookie.Set_cookie_hdr.(extract resp.headers |> List.map (fun (_, x) -> x.cookie))
-              in
-              (* return a triple of the code, body, cookies *)
-              match Code.code_of_status (Response.status resp) with
-              | 200 ->
-                  let%lwt s = Cohttp_lwt.Body.to_string body in
-                  Lwt.return (200, [%e formatter_exp] s, cookies)
-              | 301 ->
-                  Lwt.fail_with
-                    (Printf.sprintf
-                       "serf received HTTP response code 301, meaning that the \
-                        requested resource has been moved.")
-              | n ->
-                  let%lwt s = Cohttp_lwt.Body.to_string body in
-                  Lwt.return (n, [%e formatter_exp] s, cookies)]
-          in
-          pexp_fun ~loc (Optional "cookies")
-            (Some [%expr []])
-            (pvar ~loc "cookies")
-          (pexp_fun ~loc Nolabel None (punit ~loc) payload_exp)
+      let fn =
+        let formatter_exp =
+          match format with
+          | `Raw -> [%expr fun s -> s]
+          | `Json None -> [%expr Yojson.Safe.from_string]
+          | `Json (Some func) ->
+              [%expr
+                fun s ->
+                  let open Result in
+                  let mime =
+                    Cohttp.(Header.get (Response.headers resp) "Content-Type")
+                    |> function
+                    | Some s -> s
+                    | None -> ""
+                  in
+                  match String.trim (String.lowercase_ascii mime) with
+                  | "application/json; charset=utf-8" | "application/json;"
+                  | "application/json" | "" -> (
+                      let json = Yojson.Safe.from_string s in
+                      match [%e func] json with
+                      | Ok _ as x -> x
+                      | Error msg ->
+                          Error
+                            ("serf: the following fragment does not adhere \
+                              to the expected schema (" ^ msg ^ "):\n"
+                            ^ Yojson.Safe.pretty_to_string json
+                            ^ "\n"))
+                  | s ->
+                      Error
+                        (Printf.sprintf
+                            "bad response Content-Type (%s):expected (%s)" mime
+                            "application/json; charset=utf-8")]
+        in
+        let req_exp =
+          let meth_exp = match meth with
+            | `Get -> [%expr `GET]
+            | `Delete -> [%expr `DELETE]
+            | `Patch -> [%expr `PATCH]
+            | `Post -> [%expr `POST]
+            | `Put -> [%expr `PUT]
+          in [%expr Client.call ~headers ~body:(Cohttp_lwt.Body.of_string body) [%e meth_exp] uri]
+        in
+        let payload_exp =
+          [%expr
+            let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
+            let headers = Cohttp.Header.add headers "Cookie" cookies
+            in
+            Lwt_io.printf "%s\n" (Uri.to_string uri);%lwt
+            let%lwt resp, body =
+              [%e req_exp]
+            in
+            let cookies = Cohttp.Cookie.Set_cookie_hdr.(extract resp.headers |> List.map (fun (_, x) -> x.cookie))
+            in
+            (* return a triple of the code, body, cookies *)
+            match Code.code_of_status (Response.status resp) with
+            | 200 ->
+                let%lwt s = Cohttp_lwt.Body.to_string body in
+                Lwt.return (200, [%e formatter_exp] s, cookies)
+            | 301 ->
+                Lwt.fail_with
+                  (Printf.sprintf
+                      "serf received HTTP response code 301, meaning that the \
+                      requested resource has been moved.")
+            | n ->
+                let%lwt s = Cohttp_lwt.Body.to_string body in
+                Lwt.return (n, [%e formatter_exp] s, cookies)]
+        in
+        pexp_fun ~loc Nolabel None (punit ~loc) payload_exp 
+        |> pexp_fun ~loc (Optional "cookies") (Some [%expr []]) (pvar ~loc "cookies")
       in
       List.fold_right (fun { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } accum ->
         let attrs = pld_attributes @ pld_type.ptyp_attributes in
@@ -228,8 +226,6 @@ let generate_impl ~loc url format meth type_decl =
             let body = x in
             [%e a]]
         in
-        (* cannot be body and post *)
-        (* cannot be uri(query) and path *)
         let add_param_accum a =
           if attr_ispathparam attrs
             then add_path_to_uri_accum a
@@ -257,20 +253,20 @@ let generate_impl ~loc url format meth type_decl =
               pexp_fun ~loc (Optional name) default (pvar ~loc name) (param_accum accum)
           | None ->
             (* TODO: generalize this. we should be able to have
-            optional post params, headers, etc *)
+            optional post params, headers, etc.
+            why are only optional query params allowed? *)
               begin match pld_type with
                 | [%type: [%t? _] option] ->
                     let accum' =
                       [%expr
-                        let uri =
-                          match [%e evar_name] with
-                            | Some x ->
-                                let x = [%e converter] x in
-                                begin match x with
-                                  | [] -> raise (Failure ("parameter '" ^ name ^ "' is required"))
-                                  | x -> Uri.add_query_param uri ([%e key], x)
-                                end
-                            | None -> uri
+                        let uri = match [%e evar_name] with
+                          | Some x ->
+                            let x = [%e converter] x in
+                            begin match x with
+                              | [] -> raise (Failure ("parameter '" ^ [%e key] ^ "' is required"))
+                              | x -> Uri.add_query_param uri ([%e key], x)
+                            end
+                          | None -> uri
                         in [%e accum]]
                     in
                     pexp_fun ~loc (Optional name) None (pvar ~loc name) accum'
