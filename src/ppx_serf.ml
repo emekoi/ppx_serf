@@ -149,8 +149,8 @@ let generate_impl ~loc url format meth type_decl =
           pexp_fun ~loc (Optional "cookies")
             (Some [%expr []])
             (pvar ~loc "cookies")
-          payload_exp
-        in
+          (pexp_fun ~loc Nolabel None (punit ~loc) payload_exp)
+      in
       List.fold_right (fun { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } accum ->
         let attrs = pld_attributes @ pld_type.ptyp_attributes in
         let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
