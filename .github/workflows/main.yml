@@ -29,5 +29,5 @@ jobs:
       - run: opam pin add ppx_serf.dev . --no-action
       - run: opam depext ppx_serf --yes --with-doc --with-test
       - run: opam install . --deps-only --with-doc --with-test
-      - run: opam install lwt_ppx
+      - run: opam install lwt_ppx lwt_ssl
       - run: opam exec -- dune build @all @runtest

@@ -120,45 +120,12 @@ let generate_impl ~loc url format meth type_decl =
           in
           let payload_exp =
             [%expr
-              let headers =
-                Cohttp.Header.init_with "User-Agent" "Mozilla/5.0"
+              let headers = Cohttp.Header.of_list ["User-Agent", "Mozilla/5.0"; Cohttp.Cookie.Cookie_hdr.serialize cookies]
               in
-              let cookies =
-                match cookies with
-                | [] -> ""
-                | cookies' ->
-                    let first_cookie =
-                      let k, v = List.hd cookies' in
-                      k ^ "=" ^ v
-                    in
-                    List.fold_left
-                      (fun acc (k, v) -> acc ^ "; " ^ k ^ "=" ^ v)
-                      first_cookie (List.tl cookies')
-              in
-              let headers = Cohttp.Header.(add headers "Cookie" cookies) in
               let%lwt resp, body =
                 [%e req_exp]
               in
-              let cookies_headers =
-                Cohttp.Header.get_multi resp.headers "Set-Cookie"
-              in
-              let cookies =
-                match Cohttp.Header.get resp.headers "Cookie" with
-                | Some cookies ->
-                    ExtString.String.nsplit cookies "; "
-                    |> List.map (fun cookie ->
-                           let [ k; v ] = ExtString.String.nsplit cookie "=" in
-                           (k, v))
-                | None -> []
-              in
-              let cookies =
-                List.fold_left
-                  (fun acc c ->
-                    acc
-                    @ ( ExtString.String.nsplit c ";" |> List.hd |> fun s ->
-                        ExtString.String.nsplit s "=" |> fun [ k; v ] ->
-                        [ (k, v) ] ))
-                  cookies cookies_headers
+              let cookies = Cohttp.Cookie.Set_cookie_hdr.(extract resp.headers |> List.map (fun (_, x) -> x.cookie))
               in
               (* return a triple of the code, body, cookies *)
               match Code.code_of_status (Response.status resp) with
@@ -183,10 +150,7 @@ let generate_impl ~loc url format meth type_decl =
         let attrs = pld_attributes @ pld_type.ptyp_attributes in
         let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
         let evar_name = evar ~loc name in
-        let key =
-          match attr_key attrs with
-            | Some key -> key
-            | None -> estring ~loc name
+        let key = Option.default (estring ~loc name) (attr_key attrs)
         in
         (** The function that will be used at runtime to marshal this
           * parameter into a string or (nonempty) list of strings *)
