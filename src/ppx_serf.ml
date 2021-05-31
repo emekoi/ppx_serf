@@ -35,9 +35,6 @@ let attr_default attrs =
   Ppx_deriving.(
     attrs |> attr ~deriver "default" |> Arg.(get_attr ~deriver expr))
 
-let attr_header attrs =
-  Ppx_deriving.(attrs |> attr ~deriver "header" |> Arg.(get_attr ~deriver expr))
-
 let attr_ispostparam attrs =
   Ppx_deriving.(attrs |> attr ~deriver "post" |> Arg.get_flag ~deriver)
 
@@ -250,24 +247,13 @@ let generate_impl ~loc url format meth type_decl =
             then add_body_accum a
           else if attr_ispostparam attrs
             then add_post_param_accum a
-          else if Option.is_none(attr_header attrs)
-            then add_to_uri_accum a
-          else a
-        in
-        let add_header_accum a =
-          match attr_header attrs with
-          | Some h -> let a = [%expr
-            let [x] = [%e converter] [%e evar_name] in
-            let headers = Cohttp.Header.replace headers [%e h] x in
-            [%e a]] in a
-          | None -> a
-        in
-        let param_accum a = add_header_accum (add_param_accum a)
+          else
+            add_to_uri_accum a
         in
         match attr_default attrs with
           | Some default ->
             let default = Some (Ppx_deriving.quote ~quoter default) in
-              pexp_fun ~loc (Optional name) default (pvar ~loc name) (param_accum accum)
+              pexp_fun ~loc (Optional name) default (pvar ~loc name) (add_param_accum accum)
           | None ->
             (* TODO: generalize this. we should be able to have
             optional post params, headers, etc.
@@ -288,7 +274,7 @@ let generate_impl ~loc url format meth type_decl =
                     in
                     pexp_fun ~loc (Optional name) None (pvar ~loc name) accum'
                 | _ ->
-                    pexp_fun ~loc (Labelled name) None (pvar ~loc name) (param_accum accum)
+                    pexp_fun ~loc (Labelled name) None (pvar ~loc name) (add_param_accum accum)
               end)
         labels
         fn
