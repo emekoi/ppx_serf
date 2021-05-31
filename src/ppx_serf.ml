@@ -123,7 +123,6 @@ let generate_impl ~loc url format meth type_decl =
         in
         let payload_exp =
           [%expr
-          let headers = Cohttp.Header.of_list @@ ("User-Agent", "Mozilla/5.0") :: headers in
           let headers =
             if List.length cookies > 0
               then
@@ -151,8 +150,6 @@ let generate_impl ~loc url format meth type_decl =
                 Lwt.return (n, [%e formatter_exp] s, cookies)]
         in
         pexp_fun ~loc Nolabel None (punit ~loc) payload_exp 
-        |> pexp_fun ~loc (Optional "headers") (Some [%expr []]) (pvar ~loc "headers")
-        |> pexp_fun ~loc (Optional "cookies") (Some [%expr []]) (pvar ~loc "cookies")
       in
       List.fold_right (fun { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } accum ->
         let attrs = pld_attributes @ pld_type.ptyp_attributes in
@@ -226,7 +223,11 @@ let generate_impl ~loc url format meth type_decl =
           [%expr
           let [x] = [%e converter] [%e evar_name] in
           let body =
-            let form = (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x) in
+            let form =
+              let open Uri in
+              let k = pct_encode ~component:`Query_key [%e key] in
+              let v = pct_encode ~component:`Query_value x in
+              k ^ "=" ^ v in
             if body = "" then  form
             else body ^ "&" ^ form
           in
@@ -257,7 +258,7 @@ let generate_impl ~loc url format meth type_decl =
           match attr_header attrs with
           | Some h -> let a = [%expr
             let [x] = [%e converter] [%e evar_name] in
-            let headers = Cohttp.Header.add headers [%e h] x in
+            let headers = Cohttp.Header.replace headers [%e h] x in
             [%e a]] in a
           | None -> a
         in
@@ -296,6 +297,11 @@ let generate_impl ~loc url format meth type_decl =
           deriver
   in
   let uri = estring ~loc url in
+  let creator = pexp_fun ~loc (Optional "headers") (Some [%expr []]) (pvar ~loc "headers") [%expr
+    let headers = Cohttp.Header.of_list @@ ("User-Agent", "Mozilla/5.0") :: headers in
+    [%e creator]
+  ] |> pexp_fun ~loc (Optional "cookies") (Some [%expr []]) (pvar ~loc "cookies")
+  in
   let creator =
     [%expr
       let open Cohttp in
