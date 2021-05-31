@@ -123,8 +123,13 @@ let generate_impl ~loc url format meth type_decl =
         in
         let payload_exp =
           [%expr
-            let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
-            let headers = Cohttp.Header.add headers "Cookie" cookies
+          let headers = Cohttp.Header.of_list @@ ("User-Agent", "Mozilla/5.0") :: headers in
+          let headers =
+            if List.length cookies > 0
+              then
+                let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
+                Cohttp.Header.add headers "Cookie" cookies
+              else headers
             in
             let%lwt resp, body =
               [%e req_exp]
@@ -146,6 +151,7 @@ let generate_impl ~loc url format meth type_decl =
                 Lwt.return (n, [%e formatter_exp] s, cookies)]
         in
         pexp_fun ~loc Nolabel None (punit ~loc) payload_exp 
+        |> pexp_fun ~loc (Optional "headers") (Some [%expr []]) (pvar ~loc "headers")
         |> pexp_fun ~loc (Optional "cookies") (Some [%expr []]) (pvar ~loc "cookies")
       in
       List.fold_right (fun { pld_name = { txt = name; loc }; pld_type; pld_attributes; pld_loc; _ } accum ->
@@ -215,15 +221,20 @@ let generate_impl ~loc url format meth type_decl =
             [%e a]]
         in
         (* bootleg url-form-encoder *)
+        (* TODO: this is really janked and kind of hardcoded in *)
         let add_post_param_accum a =
           [%expr
-            let [x] = [%e converter] [%e evar_name] in
-            let body =
-              let form = (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x) in
-              if body = "" then  form
-              else body ^ "&" ^ form
-            in
-            [%e a]]
+          let [x] = [%e converter] [%e evar_name] in
+          let body =
+            let form = (Uri.pct_encode [%e key]) ^ "=" ^ (Uri.pct_encode x) in
+            if body = "" then  form
+            else body ^ "&" ^ form
+          in
+          let headers = List.fold_left (fun a (k, v) -> Cohttp.Header.replace a k v) headers [
+            "Content-Type", "application/x-www-form-urlencoded";
+            "Content-Length", (string_of_int @@ String.length body)
+          ] in
+          [%e a]]
         in
         let add_body_accum a =
           [%expr
@@ -293,7 +304,6 @@ let generate_impl ~loc url format meth type_decl =
       let open ExtLib in
       let uri = Uri.of_string [%e uri] in
       let body = "" in
-      let headers = Cohttp.Header.init_with "User-Agent" "Mozilla/5.0" in
       [%e creator]]
   in
   value_binding ~loc ~pat:(pvar ~loc (gen_name type_decl meth)) ~expr:(Ppx_deriving.sanitize ~quoter creator)
