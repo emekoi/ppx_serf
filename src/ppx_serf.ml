@@ -106,7 +106,7 @@ let generate_impl ~loc url format meth type_decl =
                               to the expected schema (" ^ msg ^ "):\n"
                             ^ Yojson.Safe.pretty_to_string json
                             ^ "\n"))
-                  | s ->
+                  | _ ->
                       Error
                         (Printf.sprintf
                             "bad response Content-Type (%s):expected (%s)" mime
@@ -126,7 +126,6 @@ let generate_impl ~loc url format meth type_decl =
             let cookies = snd (Cohttp.Cookie.Cookie_hdr.serialize cookies) in
             let headers = Cohttp.Header.add headers "Cookie" cookies
             in
-            Lwt_io.printf "%s\n" (Uri.to_string uri);%lwt
             let%lwt resp, body =
               [%e req_exp]
             in
@@ -169,22 +168,28 @@ let generate_impl ~loc url format meth type_decl =
           in
           match t with
             | [%type: int] ->
-                [%expr (string_of_int)]
+                [%expr fun x -> [string_of_int x]]
             | [%type: bool] ->
-                [%expr (string_of_bool)]
+                [%expr fun x -> [string_of_bool x]]
             | [%type: float] ->
-                [%expr (string_of_float)]
+                [%expr fun x -> [string_of_float x]]
             | [%type: string] ->
-                [%expr ((fun x -> x)[@inlined])]
-            | [%type: [%t? t1] * [%t? t2]] -> (* I'm so sorry *)
-                let c1, c2 = make_converter t1, make_converter t2 in
-                [%expr (fun (a, b) -> ([%e c1] a) ^ "," ^ ([%e c2] b))]
-            | [%type: [%t? t1] * [%t? t2] * [%t? t3]] ->
-                (* I'll never use anything bigger than a 3-tuple, right? *)
-                let c1, c2, c3 = make_converter t1, make_converter t2, make_converter t3 in
-                [%expr (fun (a, b, c) -> ([%e c1] a) ^ "," ^ ([%e c2] b) ^ "," ([%e c3]))]
-            | [%type: [%t? _]] ->
-                Location.raise_errorf ~loc:pld_loc "cannot derive %s for field '%s'" deriver name
+                [%expr ((fun x -> [x])[@inlined])]
+            | {ptyp_desc = Ptyp_tuple fields; _} ->
+                (** iterate over the tuple fields to get names and gen symbols *)
+                let symbols = List.map (fun x -> x, gen_symbol()) fields in
+                let fn_body =
+                    let f (f, s ) = [%expr [%e make_converter f] [%e evar ~loc s]] in
+                    (** create expression of converted tuple fields in list: string list list *)
+                    List.fold_right (fun fs a -> [%expr [%e f fs] :: [%e a]]) symbols [%expr [[]]]
+                in
+                (** tuple arg pattern *)
+                let tuple_bindings = List.map (pvar ~loc) (List.split symbols |> snd) in
+                (** create the actual function. need to List.concat to get string list *)
+                pexp_fun ~loc Nolabel None (ppat_tuple ~loc tuple_bindings) [%expr List.concat [%e fn_body]]
+            | [%type: [%t? x]] ->
+              let type_name = Ppxlib.string_of_core_type x in
+                Location.raise_errorf ~loc:pld_loc "cannot derive %s for field '%s' of type '%s'" deriver name type_name
         in
         (** The converter needs to get wrapped with [List.map] if t is a
           * list type *)
@@ -194,7 +199,7 @@ let generate_impl ~loc url format meth type_decl =
                 [%expr
                   List.map ([%e make_converter pld_type])]
             | _ ->
-                [%expr (fun x -> [[%e make_converter pld_type] x])]
+                [%expr (fun x -> [%e make_converter pld_type] x)]
         in
         let add_to_uri_accum a =          
           [%expr
@@ -294,13 +299,13 @@ let generate_impl ~loc url format meth type_decl =
   value_binding ~loc ~pat:(pvar ~loc (gen_name type_decl meth)) ~expr:(Ppx_deriving.sanitize ~quoter creator)
 
 (* _rec_flag is recursiveness so we don't need it *)
-let generate_impls ~ctxt (_rec_flag, type_decls) _url _format _meth =
+let generate_impls ~ctxt (_rec_flag, type_decls) url format meth =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
-  let url, format, meth = parse_options loc _url _format _meth in
+  let url, format, meth = parse_options loc url format meth in
   List.map (generate_impl ~loc url format meth) type_decls
   |> Ast_builder.Default.(pstr_value_list ~loc Nonrecursive)
 
-let generate_intf ~loc _url _format meth type_decl =
+let generate_intf ~loc meth type_decl =
   let open Ast_builder.Default in
   let default_loc = Ast_helper.default_loc in 
   let typ = Ppx_deriving.core_type_of_type_decl type_decl in
@@ -332,10 +337,10 @@ let generate_intf ~loc _url _format meth type_decl =
   in
   psig_value ~loc (value_description ~loc ~name:{txt = (gen_name type_decl meth); loc = !default_loc} ~type_:typ ~prim:[])
 
-let generate_intfs ~ctxt (_rec_flag, type_decls) _url _format _meth =
+let generate_intfs ~ctxt (_rec_flag, type_decls) url format _meth =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
-  let url, format, meth = parse_options loc _url _format _meth in
-  List.map (generate_intf ~loc url format meth) type_decls
+  let _, _, meth = parse_options loc url format _meth in
+  List.map (generate_intf ~loc meth) type_decls
 
 let impl_generator =
   Deriving.Generator.V2.make
