@@ -53,7 +53,6 @@ let is_optional { pld_type; pld_attributes; _ } =
       | [%type: [%t? _] list] | [%type: [%t? _] option] -> true
       | _ -> false)
 
-
 let gen_name type_decl meth =
   let prefix =
   match meth with
@@ -174,7 +173,8 @@ let generate_impl ~loc url format meth type_decl =
             | [%type: float] ->
                 [%expr fun x -> [string_of_float x]]
             | [%type: string] ->
-                [%expr ((fun x -> [x])[@inlined])]
+                (*get a syntax error when adding a inline annotation*)
+                [%expr (fun x -> [x])]
             | {ptyp_desc = Ptyp_tuple fields; _} ->
                 (** iterate over the tuple fields to get names and gen symbols *)
                 let symbols = List.map (fun x -> x, gen_symbol()) fields in
@@ -187,6 +187,15 @@ let generate_impl ~loc url format meth type_decl =
                 let tuple_bindings = List.map (pvar ~loc) (List.split symbols |> snd) in
                 (** create the actual function. need to List.concat to get string list *)
                 pexp_fun ~loc Nolabel None (ppat_tuple ~loc tuple_bindings) [%expr List.concat [%e fn_body]]
+            | {ptyp_desc =  Ptyp_constr _; _} as x ->
+              (* let  = Ppx_deriving.quote ~quoter default in *)
+              let full_path = Ppxlib.string_of_core_type x in
+                let (mname, tname) = match Stringext.rcut ~on:"." full_path with
+                  | Some  (m, t) -> (m ^ ".", t)
+                  | None -> ("", full_path)
+                in
+              let show_method = evar ~loc (mname ^ "show_" ^ tname) |> Ppx_deriving.quote ~quoter in
+              [%expr fun x -> [[%e show_method] x]]
             | [%type: [%t? x]] ->
               let type_name = Ppxlib.string_of_core_type x in
                 Location.raise_errorf ~loc:pld_loc "cannot derive %s for field '%s' of type '%s'" deriver name type_name
@@ -197,7 +206,7 @@ let generate_impl ~loc url format meth type_decl =
           match pld_type with
             | [%type: [%t? _] list] ->
                 [%expr
-                  List.map ([%e make_converter pld_type])]
+                  (fun x -> List.map ([%e make_converter pld_type]) x |> List.concat) ]
             | _ ->
                 [%expr (fun x -> [%e make_converter pld_type] x)]
         in
@@ -282,7 +291,7 @@ let generate_impl ~loc url format meth type_decl =
         Location.raise_errorf ~loc "%s can only be derived for record types"
           deriver
   in
-  let uri = estring ~loc url in
+  let uri = url in
   let creator = pexp_fun ~loc (Optional "headers") (Some [%expr []]) (pvar ~loc "headers") [%expr
     let headers = Cohttp.Header.of_list @@ ("User-Agent", "Mozilla/5.0") :: headers in
     [%e creator]
@@ -348,13 +357,13 @@ let impl_generator =
   Deriving.Generator.V2.make
     (* these arguments go after 'input_ast (kinda like a fn) *)
     Deriving.Args.(
-      empty +> arg "url" (estring __) +> arg "format" __ +> arg "meth" __)
+      empty +> arg "url" (__) +> arg "format" __ +> arg "meth" __)
     generate_impls
 
 let intf_generator =
   Deriving.Generator.V2.make
     Deriving.Args.(
-      empty +> arg "url" (estring __) +> arg "format" __ +> arg "meth" __)
+      empty +> arg "url" (__) +> arg "format" __ +> arg "meth" __)
     generate_intfs
 
 let my_deriver =

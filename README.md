@@ -30,3 +30,5 @@ let main () =
 
 let () = Lwt_main.run (main ())
 ```
+## notes
+to derive `serf` for records containing enums, `show` must derived for those fields as well.
