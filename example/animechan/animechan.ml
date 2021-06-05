@@ -6,14 +6,13 @@ type anime_spec = { title : string; page : int [@default 1] }
 [@@deriving
   serf
     {
-      url = "https://animechan.vercel.app/api/quotes/anime";
-      meth = `Get;
+      url = `Get "https://animechan.vercel.app/api/quotes/anime";
       format = `Json anime_quotes_of_yojson;
     }]
 
 let main () =
   let title = Sys.argv.(1) in
-  let%lwt _, res, _ = serf_get_anime_spec ~page:1 ~title () in
+  let%lwt _, res, _ = get_anime_spec ~page:1 ~title () in
   match res with
   | Ok res ->
       Lwt_list.iter_s

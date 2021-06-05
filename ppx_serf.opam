@@ -12,14 +12,15 @@ build: [
 depends: [
   "ocaml"
   "dune"
+  "extlib"
+  "stringext"
+  "cohttp" 
+  "yojson"
+  "cohttp-lwt-unix"
+  "lwt"
   "ppxlib" {build}
   "ppx_tools" {build}
   "ppx_deriving" {build}
-  "ppx_deriving_yojson" {build}
-  "extlib" {build}
-  "cohttp" {build}
-  "cohttp-lwt-unix" {build}
-  "lwt" {build}
 ]
 synopsis: "Build API clients from type definitions"
 description:
