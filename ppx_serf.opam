@@ -18,6 +18,7 @@ depends: [
   "yojson"
   "cohttp-lwt-unix"
   "lwt"
+  "uri"
   "ppxlib" {build}
   "ppx_tools" {build}
   "ppx_deriving" {build}

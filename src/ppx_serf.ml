@@ -304,6 +304,7 @@ let generate_impl ~loc url format meth mangle type_decl =
               if attr_isbodyparam attrs && meth == `Post then
                 add_post_param_accum a
               else if name = "body" then add_body_accum a
+              else if name = "params" then add_to_uri_or_path_accum a
               else add_to_uri_or_path_accum a
             in
             match attr_default attrs with
@@ -354,6 +355,13 @@ let generate_impl ~loc url format meth mangle type_decl =
     |> pexp_fun ~loc (Optional "cookies")
          (Some [%expr []])
          (pvar ~loc "cookies")
+    |> fun e ->
+    pexp_fun ~loc (Optional "params")
+      (Some [%expr []])
+      (pvar ~loc "params")
+      [%expr
+        uri_assoc := List.rev_append params !uri_assoc;
+        [%e e]]
   in
   let creator =
     [%expr

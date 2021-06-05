@@ -1,7 +1,7 @@
 (executable
   (name animechan)
-  (preprocess (pps ppx_serf lwt_ppx))
-  (libraries ppx_deriving_yojson cohttp cohttp-lwt-unix lwt_ssl stringext extlib)
+  (preprocess (pps ppx_serf lwt_ppx ppx_deriving_yojson))
+  (libraries ppx_deriving_yojson.runtime ppx_tools cohttp cohttp-lwt-unix lwt_ssl stringext extlib uri)
 )
 
 (alias
