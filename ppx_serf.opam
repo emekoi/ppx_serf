@@ -12,7 +12,6 @@ build: [
 depends: [
   "ocaml"
   "dune"
-  "extlib"
   "stringext"
   "cohttp" 
   "yojson"

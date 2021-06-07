@@ -69,7 +69,7 @@ let gen_name type_decl mangle meth =
     | `Put -> "put"
   in
   let prefix' =
-    let app o f = Option.map_default f prefix o in
+    let app o f = Option.map f o |> Option.value ~default:prefix in
     Option.map
       (function
         | `Prefix x -> `Prefix (app x (fun p -> p ^ "_" ^ prefix))
@@ -80,8 +80,9 @@ let gen_name type_decl mangle meth =
   in
   let f x = Ppx_deriving.mangle_type_decl x type_decl in
   match type_decl with
-  | { ptype_name = { txt = "t"; _ }; _ } -> Option.map_default f prefix prefix'
-  | _ -> Option.default (`Prefix prefix) prefix' |> f
+  | { ptype_name = { txt = "t"; _ }; _ } ->
+      Option.map f prefix' |> Option.value ~default:prefix
+  | _ -> Option.value ~default:(`Prefix prefix) prefix' |> f
 
 (* The function that will be used at runtime to marshal this
 * parameter into a string or (nonempty) list of strings *)
@@ -256,7 +257,9 @@ let generate_impl ~loc url format meth mangle type_decl =
             let attrs = pld_attributes @ pld_type.ptyp_attributes in
             let pld_type = Ppx_deriving.remove_pervasives ~deriver pld_type in
             let evar_name = evar ~loc name in
-            let key = Option.default (estring ~loc name) (attr_key attrs) in
+            let key =
+              Option.value ~default:(estring ~loc name) (attr_key attrs)
+            in
             let add_to_uri_or_path_accum a =
               [%expr
                 uri_assoc :=
@@ -368,7 +371,6 @@ let generate_impl ~loc url format meth mangle type_decl =
       let open Cohttp in
       let open Cohttp_lwt_unix in
       let open Lwt in
-      let open ExtLib in
       let uri_assoc = ref [] in
       let uri_ref = ref [%e url] in
       let body = "" in

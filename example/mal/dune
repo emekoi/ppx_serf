@@ -1,7 +1,7 @@
 (executable
   (name mal)
   (preprocess (pps ppx_serf lwt_ppx ppx_deriving_yojson))
-  (libraries ppx_deriving_yojson.runtime cohttp cohttp-lwt-unix lwt_ssl stringext extlib uri)
+  (libraries ppx_deriving_yojson.runtime cohttp cohttp-lwt-unix lwt_ssl stringext uri)
 )
 
 (alias

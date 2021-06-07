@@ -3,6 +3,6 @@
  (public_name ppx_serf)
  (kind ppx_deriver)
  (preprocess (pps ppxlib.metaquot))
- (libraries ppxlib ppx_deriving.api stringext extlib)
+ (libraries ppxlib ppx_deriving.api stringext)
  (flags (:standard))
 )
